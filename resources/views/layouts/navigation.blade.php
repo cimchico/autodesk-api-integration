@@ -15,6 +15,9 @@
                     <x-nav-link :href="route('dashboard')" :active="request()->routeIs('dashboard')">
                         {{ __('Dashboard') }}
                     </x-nav-link>
+                      <x-nav-link :href="route('pooling-api.index')" :active="request()->routeIs('pooling-api.index')">
+                        {{ __('Pooling API') }}
+                    </x-nav-link>
                 </div>
             </div>
 
