@@ -10,9 +10,15 @@
     <!-- Fonts -->
     <link rel="preconnect" href="https://fonts.bunny.net">
     <link rel="stylesheet" href="{{ asset('build/assets/app-BM_z9CEK.css') }}">
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
 
     <!-- Scripts -->
     <script src="{{ asset('build/assets/app-CFarXu-w.js') }}" defer></script>
+
+    <!-- Bootstrap Bundle JS (with Popper) -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+
 
     <!-- jQuery CDN (required for refresh button to work) -->
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
@@ -22,9 +28,9 @@
 
     <!-- Logo -->
     <div class="p-4 text-center">
-        <a href="/">
+        <!-- <a href="/">
             <x-application-logo class="w-20 h-20 fill-current text-gray-500" />
-        </a>
+        </a> -->
     </div>
 
     <!-- Container -->
@@ -36,7 +42,7 @@
 
         <!-- Refresh Button -->
         <div class="text-center mb-4">
-            <button onclick="refreshIframe()" class="btn btn-primary btn-lg px-5 shadow-sm">
+            <button onclick="refreshIframe()" class="btn btn-success btn-lg px-5 shadow-sm">
                 🔄 Refresh Power BI Report
             </button>
         </div>

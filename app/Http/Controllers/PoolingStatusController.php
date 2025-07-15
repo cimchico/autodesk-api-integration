@@ -12,7 +12,7 @@ class PoolingStatusController extends Controller
      */
     public function index()
     {
-        //
+        //        
         return view('pooling-ui.index', [
             'poolingApiStatus' => PoolingStatus::latest()->first(), 
         ]);

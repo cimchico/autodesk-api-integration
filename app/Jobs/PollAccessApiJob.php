@@ -28,6 +28,7 @@ class PollAccessApiJob implements ShouldQueue
     public function __construct()
     {
         //
+        
     }
 
     /**
@@ -44,10 +45,11 @@ class PollAccessApiJob implements ShouldQueue
             Log::info("Polled Access Token: " . json_encode($response));
 
             // Re-dispatch job to run again after 5 seconds
-            self::dispatch()->delay(now()->addSeconds(15));
+            self::dispatch()->delay(now()->addSeconds(5));
         } else {
             Log::info("Stopped polling: is_polling is false.");
         }
+
         Log::info(json_encode($poolingStatus));
     }
 
@@ -118,13 +120,10 @@ class PollAccessApiJob implements ShouldQueue
             $callback['forms'] = $forms;
             $callback['templates'] = $templates;
         }
-
-       
-
         return $callback;
     }
 
-    private function getTokensFromFile() 
+    private function getTokensFromFile()
     {
         
         $path = base_path('public\tokens.json');
@@ -195,8 +194,29 @@ class PollAccessApiJob implements ShouldQueue
             || array_diff_assoc(array_column($resultData, 'updatedAt', 'id'), array_column($previousSnapshot, 'updatedAt', 'id'));
 
 
-            Log::info('has change' . $hasChanged);
+
             if ($hasChanged) {
+
+                 $previousIds = collect($previousSnapshot)->pluck('id')->toArray();
+                 $currentIds = collect($resultData)->pluck('id')->toArray();
+                 $deletedIds = array_diff($previousIds, $currentIds);
+
+                 foreach ($deletedIds as $deletedId) {
+                    $formData = collect($previousSnapshot)->firstWhere('id', $deletedId);
+                    
+                    if ($formData && isset($formData['template_id'])) {
+                        $deleteResult = $this->deleteForm([
+                            'id' => $deletedId,
+                            'template_id' => $formData['template_id']
+                        ]);
+
+            if ($deleteResult['success']) {
+                Log::info($deleteResult['message']);
+            } else {
+                Log::warning($deleteResult['message']);
+            }
+        }
+    }
             
               foreach ($response_data['data'] as $form) {
                     $saveResult = $this->saveForms([
@@ -207,12 +227,19 @@ class PollAccessApiJob implements ShouldQueue
                
 
                     if (!$saveResult['success']) {
-                        Log::warning($saveResult['message']);
+                
+                        Log::warning('nag success chico');
                     } else {
                         Log::info($saveResult['message']);
                     }
                 }
-              file_put_contents($cacheFile, json_encode($resultData));
+
+               file_put_contents($cacheFile, json_encode($resultData));
+
+               $refreshedTokenData = $this->getValidAccessToken(); // this should read from ms_token.json and refresh
+
+
+               Log::info('Access token refreshed after form sync.');
             }
           
             return ["success"=>true,"response"=>$resultData];
@@ -348,6 +375,7 @@ class PollAccessApiJob implements ShouldQueue
         ];
      }
     }
+
     public function saveTemplates(array $forms)
     {
         try {
@@ -355,75 +383,173 @@ class PollAccessApiJob implements ShouldQueue
              
              if (!Templates::where('template_id', $forms['id'])->exists()) {
                  $newTemplate = new Templates();
-            $newTemplate->template_id = $forms['id'];
-            $newTemplate->name = $forms['name'];
-            $newTemplate->project_id = $forms['projectId'];
-            $newTemplate->save();
-            $isNew = true;
+                 $newTemplate->template_id = $forms['id'];
+                 $newTemplate->name = $forms['name'];
+                 $newTemplate->project_id = $forms['projectId'];
+                 $newTemplate->save();
+                 $isNew = true;
              }
+             
+             // ✅ Sanitize table name from template name
+             $tableName = 'template_' . Str::slug($forms['name'], '_');
 
-        // ✅ Sanitize table name from template name
-        $tableName = 'template_' . Str::slug($forms['name'], '_');
-
-        // ✅ Always ensure the table exists
-        if (!Schema::hasTable($tableName)) {
-            Schema::create($tableName, function (Blueprint $table) {
-                $table->char('id', 36)->primary();
-                $table->char('template_id')->nullable();
-                $table->text('data')->nullable();
-                $table->timestamps();
-            });
+             // ✅ Always ensure the table exists
+             if (!Schema::hasTable($tableName)) {
+                Schema::create($tableName, function (Blueprint $table) {
+                    $table->char('id', 36)->primary();
+                    $table->char('template_id')->nullable();
+                    $table->text('data')->nullable();
+                    $table->timestamps();
+                });
+             }
+             
+             return [
+                'success' => true,
+                'message' => ($isNew ? 'Saved and table created: ' : 'Table ensured for existing: ') . $forms['id']
+            ];
+        } catch (\Exception $e) {
+            Log::info('Error: ' . $e->getMessage());
+            return ['success' => false, 'message' => 'Error: ' . $e->getMessage()];
         }
-
-        return [
-            'success' => true,
-            'message' => ($isNew ? 'Saved and table created: ' : 'Table ensured for existing: ') . $forms['id']
-        ];
-
-    } catch (\Exception $e) {
-        Log::info('Error: ' . $e->getMessage());
-        return ['success' => false, 'message' => 'Error: ' . $e->getMessage()];
-    }
     }
     
     public function saveForms(array $forms)
     {
         try {
             Log::info('from get form' . json_encode($forms));
-        // Step 1: Find template and get its custom table name
-        $template = Templates::where('template_id', $forms['template_id'])->first();
+            // Step 1: Find template and get its custom table name
+            $template = Templates::where('template_id', $forms['template_id'])->first();
+            if (!$template || empty($template->name)) {
+                return ['success' => false, 'message' => 'Template not found or missing table name for template_id: ' . $forms['template_id']];
+            }
+            
+            $tableName = 'template_' . Str::slug($template->name, '_');
+            // Step 2: Check if table exists
+            if (!Schema::hasTable($tableName)) {
+                return ['success' => false, 'message' => 'Table does not exist: ' . $tableName];
+            }
 
-        if (!$template || empty($template->name)) {
-            return ['success' => false, 'message' => 'Template not found or missing table name for template_id: ' . $forms['template_id']];
+            $now = now();
+
+            // Step 3: Insert or update
+            DB::table($tableName)->updateOrInsert(
+                ['id' => $forms['id']], // Unique key to match (acts as WHERE clause)
+                [
+                    'template_id' => $forms['template_id'],
+                    'data' => json_encode($forms['pdfValues']),
+                    'updated_at' => $now,
+                    'created_at' => DB::raw("COALESCE(created_at, '$now')") // preserve if exists
+                ]
+            );
+
+            
+
+            return ['success' => true, 'message' => 'Saved/Updated in ' . $tableName . ': ' . $forms['id']];
+
+        } catch (\Exception $e) {
+            Log::error('Error saving form: ' . $e->getMessage());
+            return ['success' => false, 'message' => 'Error: ' . $e->getMessage()];
+        }
+    }
+
+    public function deleteForm(array $form)
+    {
+        try {
+            Log::info('Deleting form: ' . json_encode($form));
+            
+            // Step 1: Find the template and its custom table
+            $template = Templates::where('template_id', $form['template_id'])->first();
+            if (!$template || empty($template->name)) {
+                return ['success' => false, 'message' => 'Template not found or missing table name for template_id: ' . $form['template_id']];
+            }
+            
+            $tableName = 'template_' . Str::slug($template->name, '_');
+            
+            // Step 2: Check if the table exists
+            if (!Schema::hasTable($tableName)) {
+                return ['success' => false, 'message' => 'Table does not exist: ' . $tableName];
+            }
+            
+            // Step 3: Attempt to delete the row by ID
+            $deleted = DB::table($tableName)->where('id', $form['id'])->delete();
+            
+            if ($deleted) {
+                return ['success' => true, 'message' => 'Deleted form from ' . $tableName . ': ' . $form['id']];
+            } else {
+                return ['success' => false, 'message' => 'No record found with ID: ' . $form['id']];
+            }
+        } catch (\Exception $e) {
+            Log::error('Error deleting form: ' . $e->getMessage());
+            return ['success' => false, 'message' => 'Error: ' . $e->getMessage()];
+        }
+    }
+
+    public function refreshData($accessToken)
+    {
+        $client = new Client();
+      
+        try{
+     
+            $response = $client->post('https://api.powerbi.com/v1.0/myorg/datasets/5dd4d9ee-c316-4eee-8da0-a8e3526c7635/refreshes',[
+                'headers' => [
+                    'Authorization' => "Bearer $accessToken",
+                    'Content-type' => 'application/json'
+                ],
+                
+            ]);
+          
+            $response_data = json_decode($response->getBody(), true);
+
+            return $response_data;
+
+        }catch(\Exception $e){
+        
+            Log::error('Error on Refreshing data: ' . $e->getMessage());
+            return ['success' => false, 'message' => 'Error: ' . $e->getMessage()];
+        }
+    }
+
+    public function getValidAccessToken()
+    {
+        
+       $path = base_path('public\ms_token.json');
+       $token = json_decode(file_get_contents($path), true);
+        
+        if (now()->gte($token['expires_at'])) {
+            $newToken = $this->refreshAccessToken($token['refresh_token']);
+            $newToken['expires_at'] = now()->addSeconds($newToken['expires_in'])->toDateTimeString();
+            
+            file_put_contents($path, json_encode($newToken));
+            $token = $newToken;
         }
 
-        $tableName = 'template_' . Str::slug($template->name, '_');
-
-        // Step 2: Check if table exists
-        if (!Schema::hasTable($tableName)) {
-            return ['success' => false, 'message' => 'Table does not exist: ' . $tableName];
-        }
-
-        $now = now();
-
-        // Step 3: Insert or update
-        DB::table($tableName)->updateOrInsert(
-            ['id' => $forms['id']], // Unique key to match (acts as WHERE clause)
-            [
-                'template_id' => $forms['template_id'],
-                'data' => json_encode($forms['pdfValues']),
-                'updated_at' => $now,
-                'created_at' => DB::raw("COALESCE(created_at, '$now')") // preserve if exists
+        $this->refreshData($token['access_token']);
+        return $token['access_token'];
+    }
+    
+    
+    public function refreshAccessToken($refreshToken)
+    {
+        $clientId = '045bc069-d62a-4e2e-8bfd-c4de99b86aeb';
+        $clientSecret = 'oW38Q~ws_GiNNrrnBx6xm~sBDyJjRxsbB0i7qaj2';
+        $tenantId = '0615ec66-11f8-4f9f-b5ce-c9e4e0d80c37';
+        
+        $client = new \GuzzleHttp\Client();
+        
+        
+        $response = $client->post("https://login.microsoftonline.com/$tenantId/oauth2/v2.0/token", [
+            'form_params' => [
+            'client_id' => $clientId,
+            'client_secret' => $clientSecret,
+            'grant_type' => 'refresh_token',
+            'refresh_token' => $refreshToken,
+            'scope' => 'https://analysis.windows.net/powerbi/api/.default offline_access openid profile',
             ]
-        );
+        ]);
 
-        return ['success' => true, 'message' => 'Saved/Updated in ' . $tableName . ': ' . $forms['id']];
+        return json_decode($response->getBody(), true);
+    }
 
-    } catch (\Exception $e) {
-        Log::error('Error saving form: ' . $e->getMessage());
-        return ['success' => false, 'message' => 'Error: ' . $e->getMessage()];
-    }
-    }
 
 
 }

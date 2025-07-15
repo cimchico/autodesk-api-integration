@@ -323,7 +323,7 @@ class AutodeskController extends Controller
     public function createAllowUrlAutodesk()
     {
         $scope =  'data:read data:write bucket:read bucket:create account:read';
-        $redirectUri = "http://autodesk-api-integration.com/dashboard";
+        $redirectUri = "http://localhost/authorization/{code}";
         $clientId = 'GupHzVv7usXDcDVD6s51w1W5vjBG26eKyVX7vARpDwWGx6wl';
         $clientSecret = 'Y9uv0FavsZVmPOU1fJmwNmnKGc9eoTabBvQ4MP31nY4mAHr8uPl2h8LAm75sr8hX'; 
          
@@ -346,13 +346,14 @@ class AutodeskController extends Controller
     }
 
 
-    public function authorization($code)
+    public function authorization(Request $request)
     {
         
         $client_cred = Session::get('client_credentials');
        
         $clientId = $client_cred['client_code'];
         $clientSecret = $client_cred['client_secret'];
+        $code = $request->
        
         $tokens = $this->getTokensFromFile();
         $data = [
