@@ -76,7 +76,7 @@ class PowerBiConnectionController extends Controller
     {
         $client = new Client();
         $clientId = '045bc069-d62a-4e2e-8bfd-c4de99b86aeb';
-        $clientSecret = 'oW38Q~ws_GiNNrrnBx6xm~sBDyJjRxsbB0i7qaj2';
+        $clientSecret = env('Azure_Secret');
         $tenantId  = '0615ec66-11f8-4f9f-b5ce-c9e4e0d80c37';
 
         try{
@@ -146,7 +146,7 @@ class PowerBiConnectionController extends Controller
    {
      $code = $request->query('code');
      $clientId = '045bc069-d62a-4e2e-8bfd-c4de99b86aeb';
-     $clientSecret = 'oW38Q~ws_GiNNrrnBx6xm~sBDyJjRxsbB0i7qaj2';
+     $clientSecret = env('Azure_Secret');
      $tenantId  = '0615ec66-11f8-4f9f-b5ce-c9e4e0d80c37';
      $client = new Client();
 
@@ -199,7 +199,7 @@ class PowerBiConnectionController extends Controller
     public function refreshAccessToken($refreshToken)
     {
         $clientId = '045bc069-d62a-4e2e-8bfd-c4de99b86aeb';
-        $clientSecret = 'oW38Q~ws_GiNNrrnBx6xm~sBDyJjRxsbB0i7qaj2';
+        $clientSecret = env('Azure_Secret');
         $tenantId = '0615ec66-11f8-4f9f-b5ce-c9e4e0d80c37';
         
         $client = new \GuzzleHttp\Client();
