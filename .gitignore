@@ -18,6 +18,7 @@ git add .*.log
 /storage/*.key
 /storage/pail
 /vendor
+/public/ms_token.json
 Homestead.json
 Homestead.yaml
 Thumbs.db
