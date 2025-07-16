@@ -22,6 +22,9 @@
 
     <!-- jQuery CDN (required for refresh button to work) -->
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+
+<script src="https://js.pusher.com/7.2/pusher.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/laravel-echo/1.11.3/echo.iife.js"></script>
 </head>
 
 <body class="font-sans text-gray-900 antialiased bg-gray-100 dark:bg-gray-900">
@@ -42,9 +45,18 @@
 
         <!-- Refresh Button -->
         <div class="text-center mb-4">
-            <button onclick="refreshIframe()" class="btn btn-success btn-lg px-5 shadow-sm">
-                🔄 Refresh Power BI Report
-            </button>
+            <div class="row">
+            <div class="col-6">
+                <button onclick="refreshIframe()" class="btn btn-success btn-lg px-5 shadow-sm">
+                    🔄 Refresh Power BI Report
+                </button>
+            </div>
+            <div class="col-6">
+                <div id="realtime-message" class="alert alert-info d-none"></div>
+            </div>
+            </div>
+       
+           
         </div>
 
         <hr>
@@ -66,6 +78,24 @@
                 return val;
             });
         }
+
+         // Setup Laravel Echo with Pusher
+        const echo = new Echo({
+          broadcaster: 'pusher',
+          key: "{{ env('PUSHER_APP_KEY') }}",
+          cluster: "{{ env('PUSHER_APP_CLUSTER') }}",
+          forceTLS: true
+        });
+
+    // Listen for events
+    echo.channel('forms')
+        .listen('.form.received', (e) => {
+            console.log("Received Event: ", e);
+            // Display alert or auto-refresh
+            document.getElementById('realtime-message').classList.remove('d-none');
+            document.getElementById('realtime-message').textContent = "📨 A new form was submitted!";
+            refreshIframe();
+        });
     </script>
 
 </body>

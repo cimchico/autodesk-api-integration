@@ -2,6 +2,7 @@
 
 namespace App\Jobs;
 
+use App\Events\NewFormReceived;
 use App\Models\PoolingStatus;
 
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -196,28 +197,6 @@ class PollAccessApiJob implements ShouldQueue
 
 
             if ($hasChanged) {
-
-                 $previousIds = collect($previousSnapshot)->pluck('id')->toArray();
-                 $currentIds = collect($resultData)->pluck('id')->toArray();
-                 $deletedIds = array_diff($previousIds, $currentIds);
-
-                 foreach ($deletedIds as $deletedId) {
-                    $formData = collect($previousSnapshot)->firstWhere('id', $deletedId);
-                    
-                    if ($formData && isset($formData['template_id'])) {
-                        $deleteResult = $this->deleteForm([
-                            'id' => $deletedId,
-                            'template_id' => $formData['template_id']
-                        ]);
-
-            if ($deleteResult['success']) {
-                Log::info($deleteResult['message']);
-            } else {
-                Log::warning($deleteResult['message']);
-            }
-        }
-    }
-            
               foreach ($response_data['data'] as $form) {
                     $saveResult = $this->saveForms([
                         'id' => $form['id'],    // ✅ extract values properly
@@ -235,6 +214,7 @@ class PollAccessApiJob implements ShouldQueue
                 }
 
                file_put_contents($cacheFile, json_encode($resultData));
+               event(new NewFormReceived('New Form Received'));
 
                $refreshedTokenData = $this->getValidAccessToken(); // this should read from ms_token.json and refresh
 
@@ -441,9 +421,7 @@ class PollAccessApiJob implements ShouldQueue
                     'created_at' => DB::raw("COALESCE(created_at, '$now')") // preserve if exists
                 ]
             );
-
             
-
             return ['success' => true, 'message' => 'Saved/Updated in ' . $tableName . ': ' . $forms['id']];
 
         } catch (\Exception $e) {
